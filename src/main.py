@@ -24,6 +24,7 @@ else:
     torch.set_default_tensor_type(torch.FloatTensor)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+logger.info("cuda available %s device %s", torch.cuda.is_available(), device)
 
 
 class TripletModule(nn.Module):
@@ -31,7 +32,7 @@ class TripletModule(nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self.model = nn.Sequential(
-            nn.Linear(10, 512),
+            nn.Linear(9, 512),
             nn.ReLU(inplace=True),
             nn.Linear(512, 512),
             nn.ReLU(inplace=True),
@@ -55,7 +56,7 @@ class TripletModule(nn.Module):
         return loss
 
     def evaluate(self, item, turn):
-        res = np.hstack((item.flatten(), np.array([turn])))
+        res = item.flatten()
         return float(self.forward(torch.from_numpy(res).float())[0])
 
 
@@ -119,9 +120,8 @@ class TripletDataSet(torch.utils.data.Dataset):
         for _ in range(9):
             self.move(item, turn)
             result = self.evaluate(item, turn)
-            res = np.hstack((item.flatten(), np.array([turn])))
             turn *= -1
-            self.items.append([res, result])
+            self.items.append([item, result])
             if abs(result) == 3:
                 break
             item = item.copy()
@@ -165,7 +165,6 @@ class Game(board.QtWidgets.QFrame):
         self.board = np.zeros((3, 3), dtype=np.int8)
         self.turn = -1
         self.model = TripletModule()
-        self.load()
         self.dataset = TripletDataSet(100000)
         self.signal = GameSignal()
         self.menu = GameContextMenu(self, self.signal)
@@ -197,7 +196,7 @@ class Game(board.QtWidgets.QFrame):
         with tqdm(self.dataset) as bar:
             for inputs, label in bar:
                 loss = self.model.train(
-                    torch.from_numpy(inputs).float(),
+                    torch.from_numpy(inputs.flatten()).float(),
                     torch.FloatTensor([label, ]))
                 bar.set_postfix(loss=loss.item())
 
