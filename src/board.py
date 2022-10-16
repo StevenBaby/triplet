@@ -40,10 +40,12 @@ class Board(QLabel):
 
     flags = QtCore.Qt.WindowMinimizeButtonHint | QtCore.Qt.WindowCloseButtonHint
 
+    refresh_signal = QtCore.Signal()
+
     def __init__(self, parent=None, callback=None):
         super().__init__(parent=parent)
 
-        self.csize = 60
+        self.csize = 200
         self.setPixmap(QtGui.QPixmap(BOARD_IMAGE))
 
         self.chesses = {
@@ -77,9 +79,7 @@ class Board(QLabel):
         self.labels = np.zeros((SPAN, SPAN), dtype=QLabel)
 
         self.callback = callback
-        self.signal = QtCore.Signal()
-
-        self.refresh()
+        self.refresh_signal.connect(self.refresh)
 
     def setBoard(self, board, where=None):
         # 设置 棋盘 board，以及该步的位置 pos
@@ -89,7 +89,7 @@ class Board(QLabel):
 
         self.board = board
         self.where = where
-        self.signal.emit()
+        self.refresh_signal.emit()
 
     @QtCore.Slot()
     def refresh(self):
@@ -204,7 +204,6 @@ class BoardFrame(QtWidgets.QFrame):
 
 
 def main():
-    import sys
     app = QtWidgets.QApplication(sys.argv)
     ui = BoardFrame()
     ui.show()
