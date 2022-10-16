@@ -8,3 +8,4 @@ logging.basicConfig(
     level=logging.DEBUG,
     format='[%(asctime)s] [%(module)s:%(lineno)d] %(levelname)s %(message)s',)
 logger = logging.getLogger()
+logging.getLogger("matplotlib").setLevel(logging.ERROR)
