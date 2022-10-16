@@ -3,134 +3,55 @@ import sys
 import random
 
 import numpy as np
-
-import torch
-from torch import nn
-from tqdm import tqdm
-
-
 from logger import logger
 import context
 import board
-
-DIRNAME = os.path.dirname(__file__)
-STATE_PATH = os.path.join(DIRNAME, "model.pt")
+import toast
 
 
-if torch.cuda.is_available():
-    torch.set_default_tensor_type(torch.cuda.FloatTensor)
-    print("using cuda:", torch.cuda.get_device_name(0))
-else:
-    torch.set_default_tensor_type(torch.FloatTensor)
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-logger.info("cuda available %s device %s", torch.cuda.is_available(), device)
-
-
-class TripletModule(nn.Module):
+class Model(object):
 
     def __init__(self) -> None:
-        super().__init__()
-        self.model = nn.Sequential(
-            nn.Linear(9, 512),
-            nn.ReLU(inplace=True),
-            nn.Linear(512, 512),
-            nn.ReLU(inplace=True),
-            nn.Linear(512, 1)
-        )
+        pass
 
-        self.loss = nn.CrossEntropyLoss()
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.5)
-
-    def forward(self, inputs):
-        y = self.model(inputs)
-        return y
-
-    def train(self, inputs, labels):
-        outputs = self.forward(inputs)
-        loss = self.loss(outputs, labels)
-
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
-        return loss
-
-    def evaluate(self, item, turn):
-        res = item.flatten()
-        return float(self.forward(torch.from_numpy(res).float())[0])
-
-
-class TripletDataSet(torch.utils.data.Dataset):
-
-    def __init__(self, length=10000) -> None:
-        super().__init__()
-        self.counter = 0
-        self.items = []
-        self.length = length
-
-    def __len__(self):
-        return self.length
-
-    def __getitem__(self, index):
-        if index > len(self):
-            raise StopIteration
-
-        if not self.items:
-            self.generate()
-            idx = index % len(self.items)
-        else:
-            idx = index % len(self.items)
-            if not idx:
-                self.generate()
-
-        result = self.items[idx]
-        self.counter += 1
-        return result
-
-    def move(self, item, turn):
-        args = np.argwhere(item == 0)
-        pos = random.choice(args)
-        item[(pos[0], pos[1])] = turn
-
-    def evaluate(self, item, turn):
+    @staticmethod
+    def evaluate(item):
         results = []
+
+        black = len(np.argwhere(item == 1))
+        white = len(np.argwhere(item == -1))
+        if (black - white) not in (0, 1):
+            raise Exception("invalid item %s", item)
+
+        if (black - white) == 1:
+            turn = 1
+        else:
+            turn = -1
 
         for line in item:
             results.append(sum(line))
 
-        results.append(item.trace())
+        results.append(sum([
+            item[(0, 0)],
+            item[(1, 1)],
+            item[(2, 2)],
+        ]))
+
+        results.append(sum([
+            item[(2, 0)],
+            item[(1, 1)],
+            item[(0, 2)],
+        ]))
 
         T = item.transpose()
 
         for line in T:
             results.append(sum(line))
-        results.append(T.trace())
 
         if turn > 0:
-            return max(results)
+            return max(results) / 3.0
         else:
-            return min(results)
-
-    def generate(self):
-        item = np.zeros((3, 3), dtype=np.int8)
-        turn = 1
-
-        result = 0
-
-        for _ in range(9):
-            self.move(item, turn)
-            result = self.evaluate(item, turn)
-            turn *= -1
-            self.items.append([item, result])
-            if abs(result) == 3:
-                break
-            item = item.copy()
-
-        for item in self.items:
-            item[1] = result / 3
-
-        for _ in range(10):
-            self.items.append(self.items[-1])
+            return min(results) / 3.0
 
 
 class GameSignal(board.QtCore.QObject):
@@ -164,8 +85,10 @@ class Game(board.QtWidgets.QFrame):
 
         self.board = np.zeros((3, 3), dtype=np.int8)
         self.turn = -1
-        self.model = TripletModule()
-        self.dataset = TripletDataSet(100000)
+        self.result = 0
+        self.model = Model()
+
+        self.toast = toast.Toast(self)
         self.signal = GameSignal()
         self.menu = GameContextMenu(self, self.signal)
         self.setupContextMenu()
@@ -184,21 +107,17 @@ class Game(board.QtWidgets.QFrame):
     @board.QtCore.Slot()
     def save(self):
         logger.info("save model parameters...")
-        torch.save(self.model.state_dict(), STATE_PATH)
+        self.model.save()
 
     @board.QtCore.Slot()
     def load(self):
         logger.info("load model parameters...")
-        if os.path.exists(STATE_PATH):
-            self.model.load_state_dict(torch.load(STATE_PATH))
+        self.model.load()
 
+    @board.QtCore.Slot()
     def train(self):
-        with tqdm(self.dataset) as bar:
-            for inputs, label in bar:
-                loss = self.model.train(
-                    torch.from_numpy(inputs.flatten()).float(),
-                    torch.FloatTensor([label, ]))
-                bar.set_postfix(loss=loss.item())
+        logger.info("training...")
+        self.model.train()
 
     def move(self, pos):
         if self.board[pos] != 0:
@@ -216,7 +135,7 @@ class Game(board.QtWidgets.QFrame):
             item = self.board.copy()
             idx = (pos[0], pos[1])
             item[idx] = turn
-            score = self.model.evaluate(item, turn)
+            score = self.model.evaluate(item)
             results.append((idx, score))
 
         if not results:
@@ -230,28 +149,51 @@ class Game(board.QtWidgets.QFrame):
         results = sorted(results, key=lambda e: e[1], reverse=reverse)
         return results[0][0]
 
+    def check(self):
+        if abs(self.result) != 1.0:
+            self.result = Model.evaluate(self.board)
+            logger.debug("evaluate result %s", self.result)
+        if self.result == 1.0:
+            self.toast.message("黑胜")
+            return True
+        elif self.result == -1.0:
+            self.toast.message("白胜")
+            return True
+        return False
+
     def clickPosition(self, pos):
+        if self.check():
+            return
         if self.board[pos]:
             return
 
         self.move(pos)
         self.ui.setBoard(self.board, pos)
+        if self.check():
+            return
+
         pos = self.next_move()
         if not pos:
             return
         self.move(pos)
         self.ui.setBoard(self.board, pos)
+        if self.check():
+            return
 
     def resizeEvent(self, event):
         self.ui.resizeEvent(event)
         return super().resizeEvent(event)
 
 
-def main():
+def start_app():
     app = board.QtWidgets.QApplication(sys.argv)
     ui = Game()
     ui.show()
     app.exec_()
+
+
+def main():
+    start_app()
 
 
 if __name__ == "__main__":
