@@ -94,8 +94,11 @@ class Board(QLabel):
     @QtCore.Slot()
     def refresh(self):
         # 刷新棋盘
-        for pos in np.argwhere(self.board != 0):
-            self.setChess((pos[0], pos[1]))
+        logger.debug("refresh board....")
+
+        for x in range(SPAN):
+            for y in range(SPAN):
+                self.setChess((x, y))
 
         super().update()
 
@@ -149,18 +152,19 @@ class Board(QLabel):
 
         chess = self.board[pos]
         if not chess:
-            label.setVisible(False)
-            return
+            label.setPixmap(None)
+            return label
 
         if self.pos == pos:
             images = self.border_chesses
         else:
             images = self.chesses
+
         image = images[chess]
         label.setPixmap(image)
         label.setScaledContents(True)
         label.setGeometry(self.getChessGeometry(pos))
-        label.setVisible(True)
+        return label
 
     def getChessGeometry(self, pos):
         # 获取某个位置棋子在棋盘的坐标及尺寸
