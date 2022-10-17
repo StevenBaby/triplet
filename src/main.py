@@ -173,53 +173,41 @@ class ExModel(GameModel):
         assert (idx in self.values)
         return self.values[idx]
 
-    def next_step(self, item):
-        args = np.argwhere(item == 0)
+    def minmax(self, item):
         idx = self.item_hash(item)
         if idx in self.values:
-            return
+            return self.values[idx]
 
         value = Model.evaluate(item)
         if abs(value) == 1.0:
             self.values[idx] = value
-            return
+            return value
 
+        args = np.argwhere(item == 0)
         if len(args) == 0:
             self.values[idx] = 0
-            return
+            return 0
 
         turn = self.turn(item) * -1
-
-        steps = {}
+        best = turn * -1
 
         for var in args:
             pos = (var[0], var[1])
             step = item.copy()
             step[pos] = turn
-            key = self.item_hash(step)
-            steps[key] = 0
-            self.next_step(step)
+            value = self.minmax(step)
 
-        for key in steps:
-            steps[key] = self.values[key]
+            if turn > 0 and value > best:
+                best = value
 
-        if turn > 0:
-            reverse = True
-        else:
-            reverse = False
-
-        results = sorted(
-            steps.items(), key=lambda e: abs(e[1]), reverse=reverse)
-
-        # if abs(results[0][1]) == 1:
-        assert (idx not in self.values)
-        self.values[idx] = results[-1][1]
-        # else:
-        #     self.values[idx] = results[-1][1]
+            if turn < 0 and value < best:
+                best = value
+        self.values[idx] = best
+        return best
 
     def train(self):
         item = np.zeros((3, 3), dtype=np.int8)
-        self.next_step(item)
+        self.minmax(item)
         logger.info("training finished!!!")
 
 
@@ -347,26 +335,17 @@ class Game(board.QtWidgets.QFrame):
             return
 
         self.move(pos)
-        for var in np.argwhere(self.board == 0):
-            pos = (var[0], var[1])
-            item = self.board.copy()
-            item[pos] = self.turn * -1
-            key = self.model.item_hash(item)
-            value = self.model.values[key]
-            label = self.ui.setChess(pos)
-            label.setText(str(value))
-
         self.ui.setBoard(self.board, pos)
         if self.check():
             return
 
-        # pos = self.next_move()
-        # if not pos:
-        #     return
-        # self.move(pos)
-        # self.ui.setBoard(self.board, pos)
-        # if self.check():
-        #     return
+        pos = self.next_move()
+        if not pos:
+            return
+        self.move(pos)
+        self.ui.setBoard(self.board, pos)
+        if self.check():
+            return
 
     def resizeEvent(self, event):
         self.ui.resizeEvent(event)
