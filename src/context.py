@@ -51,7 +51,8 @@ class BaseContextMenu(QtWidgets.QMenu):
                 if not key:
                     continue
                 logger.info(f"add shortcut {name}")
-                shortcut = QtWidgets.QShortcut(QtGui.QKeySequence(key), self.parentWidget())
+                shortcut = QtWidgets.QShortcut(
+                    QtGui.QKeySequence(key), self.parentWidget())
                 shortcut.activated.connect(partial(slot, self))
                 self.all_shortcuts.append(shortcut)
                 if disabled:
@@ -76,11 +77,12 @@ class BaseContextMenu(QtWidgets.QMenu):
                 continue
 
 
-class BaseContextMenuWidget(QtWidgets.QWidget):
+class ContextMenuMixin(object):
 
-    def __init__(self, parent=None) -> None:
-        super().__init__(parent=parent)
-        self.menu = BaseContextMenu(self)
+    menu_class = BaseContextMenu
+
+    def initmenu(self, parent=None, signal=None) -> None:
+        self.menu = self.menu_class(self, signal)
         self.setupContextMenu()
 
     def setupContextMenu(self):
@@ -91,9 +93,17 @@ class BaseContextMenuWidget(QtWidgets.QWidget):
         self.menu.exec_(self.mapToGlobal(point))
 
 
+class BaseContextMenuWidget(QtWidgets.QWidget, ContextMenuMixin):
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent=parent)
+        self.initmenu()
+
+
 if __name__ == '__main__':
     import sys
     app = QtWidgets.QApplication(sys.argv)
     window = BaseContextMenuWidget()
+    # logger.debug(dir(window))
     window.show()
     sys.exit(app.exec_())

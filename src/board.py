@@ -94,7 +94,6 @@ class Board(QLabel):
     @QtCore.Slot()
     def refresh(self):
         # 刷新棋盘
-        logger.debug("refresh board....")
 
         for x in range(SPAN):
             for y in range(SPAN):
@@ -147,7 +146,6 @@ class Board(QLabel):
         label = self.labels[pos]
         if not label:
             label = QLabel(self)
-            label.pos = pos
             self.labels[pos] = label
 
         chess = self.board[pos]
@@ -155,7 +153,7 @@ class Board(QLabel):
             label.setPixmap(None)
             return label
 
-        if self.pos == pos:
+        if self.where == pos:
             images = self.border_chesses
         else:
             images = self.chesses
@@ -193,17 +191,17 @@ class Board(QLabel):
 
 class BoardFrame(QtWidgets.QFrame):
 
-    def __init__(self, parent=None, board_class=Board):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.board = board_class(self)
+        self.ui = Board(self)
         # self.setWindowOpacity(0.85)
         if parent is None:
             self.setWindowIcon(QtGui.QIcon(FAVICON))
             self.setWindowTitle(u"Triplet")
-        self.resize(self.board.size())
+        self.resize(self.ui.size())
 
     def resizeEvent(self, event):
-        self.board.resizeEvent(event)
+        self.ui.resizeEvent(event)
         return super().resizeEvent(event)
 
 
