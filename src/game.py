@@ -187,12 +187,15 @@ class StatisticModel(Model):
         hash = self.get_hash(board)
         if hash in self.values:
             state = self.values[hash]
-            count = state['black'] - state['white']
-            total = state['black'] + state['white'] + state['draw']
-            return count / total
+            return self.probability(state)
 
-        logger.warning("has not in values %d", hash)
+        # logger.warning("has not in values %d", hash)
         return super().evaluate(board)
+
+    def probability(self, state):
+        count = state['black'] - state['white']
+        total = state['black'] + state['white'] + state['draw']
+        return count / total
 
     def train(self, board=None, results=None):
 
@@ -201,8 +204,7 @@ class StatisticModel(Model):
         if results is None:
             for _ in tqdm(range(self.epoch)):
                 results = {}
-                item = board.copy()
-                self.train(item, results)
+                self.train(board, results)
             return
 
         hash = self.get_hash(board)
@@ -227,6 +229,26 @@ class StatisticModel(Model):
 
         for hash, state in results.items():
             state[key] += 1
+
+
+class EnhanceModel(StatisticModel):
+
+    def __init__(self, epoch=10000) -> None:
+        super().__init__(epoch)
+        self.learning_rate = 0.8
+
+    def random_move(self, board):
+        args = self.get_args(board)
+        if not args:
+            return False
+
+        if (random.uniform(0, 1) > self.learning_rate):
+            pos = random.choice(args)
+        else:
+            pos = self.next(board)
+
+        self.move(board, pos)
+        return True
 
 
 if __name__ == "__main__":

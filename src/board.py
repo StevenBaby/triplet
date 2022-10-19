@@ -133,7 +133,7 @@ class Board(QLabel):
         pos = self.getPosition(event)
         if not pos:
             return
-        logger.debug("click %s", pos)
+        # logger.debug("click %s", pos)
         self.clickPosition(pos)
 
     def clickPosition(self, pos):
